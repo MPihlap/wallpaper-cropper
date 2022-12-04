@@ -1,0 +1,16 @@
+global:
+  input_file: "image_in.png"
+  smart_upscale: False
+  loglevel: DEBUG
+
+screens:
+  - screen: "1"
+    resolution:
+      x: 1920
+      y: 1200
+    rotation: 90
+  - screen: "2"
+    resolution:
+      x: 1920
+      y: 1080
+    rotation: 0
