@@ -4,6 +4,7 @@ import logging
 
 import cv2
 import yaml
+import numpy as np
 
 
 class Screen():
@@ -32,7 +33,7 @@ class Screen():
 
 
     def update_scaler(self, value):
-        self.scaler = value/1000
+        self.scaler = max(value/1000, 0.001)
 
 
     def __trackbar_setup(self):
@@ -46,9 +47,10 @@ class Screen():
 class ScreenCropper():
     def __init__(self, source_img, screens, preview_resolution=(1280, 720)) -> None:
         # Create a named window and name it 'Output'
-        self.window_name = "Wallpaper Cropper"
+        self.window_name = "Wallpaper Cropper preview"
+        self.trackbar_window_name = "Wallpaper Cropper control panel"
         self.img = cv2.imread(source_img)
-        cv2.namedWindow(self.window_name)
+        cv2.namedWindow(self.trackbar_window_name)
         self.colours = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
         self.preview_resolution = preview_resolution
 
@@ -56,31 +58,42 @@ class ScreenCropper():
         for screen in screens:
             self.screens.append(Screen(screen["screen"],
             (screen["resolution"]["x"], screen["resolution"]["y"]),
-            screen["rotation"], self.window_name,
+            screen["rotation"], self.trackbar_window_name,
             self.img.shape[0], self.img.shape[1]))
+        cv2.resizeWindow(self.trackbar_window_name, (1280, 200))
 
+
+    def get_width_height(self, screen):
+        r_x = self.img.shape[1] / screen.resolution[0] # ratio of native images
+        w = int(r_x*screen.scaler*self.img.shape[1])
+        h = int(w/screen.ratio)
+        if screen.rotation == 90: # TODO: Implement proper rotation handling
+            h = int(r_x*screen.scaler*self.img.shape[1])
+            w = int(h/screen.ratio)
+        return w, h
 
     def update(self):
         temp_img = self.img.copy()
         for i, screen in enumerate(self.screens):
-            x_len = int(screen.scaler*self.img.shape[1])
-            y_len = int(screen.scaler*self.img.shape[0])
-            if screen.rotation == 90: # TODO: Implement proper rotation handling
-                x_len = int(screen.scaler*self.img.shape[0])
-                y_len = int(screen.scaler*self.img.shape[1])
-            temp_img = cv2.rectangle(temp_img, (screen.x_pos, screen.y_pos), (screen.x_pos + x_len, screen.y_pos + y_len), self.colours[i], 1)
-            temp_img = cv2.putText(temp_img, screen.name, (screen.x_pos, screen.y_pos), cv2.FONT_HERSHEY_SIMPLEX, 1, self.colours[i], 1)
+            w, h = self.get_width_height(screen)
+            logging.info(f"screen {screen.name} ratio: {w/h}, expected: {screen.ratio}")
+            temp_img = cv2.rectangle(temp_img, (screen.x_pos, screen.y_pos), (screen.x_pos + w, screen.y_pos + h), self.colours[i], 3)
+            temp_img = cv2.putText(temp_img, screen.name, (screen.x_pos, screen.y_pos), cv2.FONT_HERSHEY_SIMPLEX, 1, self.colours[i], 3)
         img_preview = cv2.resize(temp_img, self.preview_resolution)
         cv2.imshow(self.window_name, img_preview)
+        #cv2.imshow(self.trackbar_window_name, np.zeros((10, 480)))
+
+        key = (cv2.waitKey(1) & 0xFF)
+        if key == ord("s"):
+            self.save_images()
+            logging.info("Saved current screens.")
+
+        return key != ord("q")
 
     def save_images(self):
         for screen in self.screens:
-            x_len = int(screen.scaler*self.img.shape[1])
-            y_len = int(screen.scaler*self.img.shape[0])
-            if screen.rotation == 90: # TODO: Implement proper rotation handling
-                x_len = int(screen.scaler*self.img.shape[0])
-                y_len = int(screen.scaler*self.img.shape[1])
-            cropped_img = self.img[screen.y_pos:screen.y_pos + y_len, screen.x_pos:screen.x_pos + x_len]
+            w, h = self.get_width_height(screen)
+            cropped_img = self.img[screen.y_pos:screen.y_pos + h, screen.x_pos:screen.x_pos + w]
             if screen.rotation == 90:
                 cropped_img = cv2.resize(cropped_img, list(reversed(screen.resolution)))
             else:
@@ -124,17 +137,16 @@ def main():
 
     global_params = params["global"]
     screen_params = params["screens"]
+    set_loglevel(global_params["loglevel"])
     logging.debug(params)
 
     sc = ScreenCropper(global_params["input_file"], screen_params)
 
     while True:
 
-        sc.update()
-
-        # Quit the program when 'q' is pressed
-        if (cv2.waitKey(1) & 0xFF) == ord('q'):
+        if not sc.update():
             break
+
     sc.save_images()
     # Close any windows associated with OpenCV GUI
     cv2.destroyAllWindows()
