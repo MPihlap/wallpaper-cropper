@@ -4,7 +4,6 @@ import logging
 
 import cv2
 import yaml
-import numpy as np
 
 
 class Screen():
@@ -76,12 +75,11 @@ class ScreenCropper():
         temp_img = self.img.copy()
         for i, screen in enumerate(self.screens):
             w, h = self.get_width_height(screen)
-            logging.info(f"screen {screen.name} ratio: {w/h}, expected: {screen.ratio}")
+            logging.debug(f"screen {screen.name} ratio: {w/h}, expected: {screen.ratio}")
             temp_img = cv2.rectangle(temp_img, (screen.x_pos, screen.y_pos), (screen.x_pos + w, screen.y_pos + h), self.colours[i], 3)
             temp_img = cv2.putText(temp_img, screen.name, (screen.x_pos, screen.y_pos), cv2.FONT_HERSHEY_SIMPLEX, 1, self.colours[i], 3)
         img_preview = cv2.resize(temp_img, self.preview_resolution)
         cv2.imshow(self.window_name, img_preview)
-        #cv2.imshow(self.trackbar_window_name, np.zeros((10, 480)))
 
         key = (cv2.waitKey(1) & 0xFF)
         if key == ord("s"):
